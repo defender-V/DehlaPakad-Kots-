@@ -89,11 +89,11 @@ socket.on("waitingForTrump", ({ chooser }) => {
   handDiv.innerHTML = `<div>Waiting for <b>${chooser}</b> to choose the trump suit...</div>`;
 });
 
-socket.on("trumpSet", ({ trump }) => {
+socket.on('trumpSet', ({ trump }) => {
   currentTrump = trump;
-  const handDiv = document.getElementById("hand");
-  handDiv.innerHTML += `<div>Trump suit for this round: <b>${trump}</b></div>`;
+  document.getElementById('trumpDisplay').innerHTML = `Trump Suit: <b style="font-size:1.4em">${trump}</b>`;
 });
+
 
 socket.on(
   "dealHand",
@@ -193,21 +193,30 @@ function renderHand() {
       const cardDiv = document.createElement("div");
       cardDiv.className = "card";
       cardDiv.innerText = card.value + card.suit;
-      cardDiv.onclick = () => playCard(idx);
+      if (isMyTurn) {
+        cardDiv.onclick = () => playCard(idx);
+        cardDiv.style.cursor = "pointer";
+        cardDiv.style.opacity = "1";
+      } else {
+        cardDiv.onclick = null;
+        cardDiv.style.cursor = "not-allowed";
+        cardDiv.style.opacity = "0.5";
+      }
       handDiv.appendChild(cardDiv);
     });
   }
 }
 
+
 function playCard(idx) {
-  const card = hand.splice(idx, 1)[0];
-  socket.emit("playCard", { roomId: currentRoomId, card });
-  renderHand();
+  socket.emit('playCard', { roomId: currentRoomId, cardIndex: idx });
+  // Do NOT remove the card from hand here.
 }
 
-socket.on("cardPlayed", ({ player, card }) => {
-  alert(`Player ${player.name} played ${card.value}${card.suit}`);
-});
+
+// socket.on("cardPlayed", ({ player, card }) => {
+//   alert(`Player ${player.name} played ${card.value}${card.suit}`);
+// });
 
 // --- Trump Chooser UI ---
 function showTrumpChooser(previewHand, suits) {
@@ -247,3 +256,88 @@ function showTrumpChooser(previewHand, suits) {
     suitOverlay.appendChild(btn);
   });
 }
+
+// Add these new event handlers and functions to your existing client.js
+
+
+let isMyTurn = false;
+
+socket.on('yourTurn', () => {
+  isMyTurn = true;
+  renderHand();
+});
+
+socket.on('handStarted', ({ starter, currentPlayer }) => {
+  isMyTurn = (players[currentPlayer] && players[currentPlayer].id === socket.id);
+  const handDiv = document.getElementById('hand');
+  handDiv.innerHTML += `<div><b>${starter}</b> starts this hand</div>`;
+  renderHand();
+});
+socket.on('turnChanged', ({ currentTurn, pile }) => {
+  isMyTurn = (players[currentTurn] && players[currentTurn].id === socket.id);
+  updatePileUI(pile);
+  renderHand();
+});
+
+
+socket.on('notYourTurn', () => {
+  alert('It\'s not your turn!');
+});
+
+socket.on('invalidCard', ({ message }) => {
+  alert(message);
+});
+
+socket.on('cardPlayed', ({ player, card, playedCards }) => {
+  // Update UI to show played cards in center
+  updatePlayedCards(playedCards);
+});
+
+socket.on('handWon', ({ winner, winningCard, playedCards }) => {
+  const winnerDiv = document.getElementById('winnerNotification');
+  winnerDiv.style.display = 'block';
+  winnerDiv.innerHTML = `${winner} wins the hand with <b>${winningCard.value}${winningCard.suit}</b>!`;
+
+  // Optionally clear played cards after showing winner
+  setTimeout(() => {
+    document.getElementById('playedCards').innerHTML = '';
+    winnerDiv.style.display = 'none';
+  }, 2000);
+});
+
+
+socket.on('gameEnded', ({ trumpHistory, finalScores }) => {
+  const handDiv = document.getElementById('hand');
+  handDiv.innerHTML = `<div>Game Over! Trump suits: ${trumpHistory.join(', ')}</div>`;
+  // Show final scores
+});
+
+function updatePlayedCards(playedCards) {
+  let playedDiv = document.getElementById('playedCards');
+  if (!playedDiv) {
+    playedDiv = document.createElement('div');
+    playedDiv.id = 'playedCards';
+    playedDiv.style.position = 'absolute';
+    playedDiv.style.top = '40%';
+    playedDiv.style.left = '50%';
+    playedDiv.style.transform = 'translate(-50%, -50%)';
+    playedDiv.style.zIndex = '15';
+    document.getElementById('table').appendChild(playedDiv);
+  }
+  playedDiv.innerHTML = '';
+  playedCards.forEach(pc => {
+    const cardDiv = document.createElement('div');
+    cardDiv.className = 'played-card';
+    cardDiv.innerText = pc.card.value + pc.card.suit;
+    cardDiv.title = pc.playerName;
+    playedDiv.appendChild(cardDiv);
+  });
+}
+
+socket.on('updateHand', (newHand) => {
+  hand = newHand;
+  renderHand();
+});
+
+
+

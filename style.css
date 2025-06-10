@@ -92,3 +92,16 @@ body { font-family: Arial, sans-serif; background: #f0f0f0; }
   background: #388e3c;
   transform: scale(1.12);
 }
+.played-card {
+  display: inline-block;
+  width: 50px;
+  height: 75px;
+  border: 1px solid #333;
+  background: #fff;
+  margin: 2px;
+  border-radius: 4px;
+  font-size: 1em;
+  text-align: center;
+  line-height: 75px;
+  box-shadow: 1px 2px 4px #888;
+}
