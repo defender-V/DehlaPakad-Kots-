@@ -61,3 +61,34 @@ body { font-family: Arial, sans-serif; background: #f0f0f0; }
   position: absolute;
   z-index: 2;
 }
+.suit-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  gap: 40px;
+  z-index: 20;
+  justify-content: center;
+  align-items: center;
+  background: rgba(255,255,255,0.85);
+  border-radius: 16px;
+  padding: 30px 50px;
+  box-shadow: 0 4px 24px #888;
+}
+
+.suit-btn {
+  font-size: 3em;
+  padding: 20px 40px;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  background: #1976d2;
+  color: #fff;
+  transition: background 0.2s, transform 0.2s;
+  margin: 0 10px;
+}
+.suit-btn:hover {
+  background: #388e3c;
+  transform: scale(1.12);
+}

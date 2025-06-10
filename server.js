@@ -12,12 +12,18 @@ app.use(express.static(__dirname));
 
 let rooms = {};
 
-function createShuffledDeck() {
+function createShuffledDeck(numPlayers) {
   const suits = ['♠', '♥', '♦', '♣'];
   const values = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
   let deck = [];
-  for (let suit of suits) for (let value of values) deck.push({ suit, value });
-  // Fisher-Yates shuffle
+  for (let suit of suits) {
+    for (let value of values) {
+      // Remove all 2's if 6 or 8 players
+      if ((numPlayers === 6 || numPlayers === 8) && value === '2') continue;
+      deck.push({ suit, value });
+    }
+  }
+  // Shuffle
   for (let i = deck.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [deck[i], deck[j]] = [deck[j], deck[i]];
@@ -34,13 +40,16 @@ function getPreviewCount(numPlayers) {
 }
 
 function sortHand(hand) {
-  const suitOrder = { '♠': 0, '♥': 1, '♦': 2, '♣': 3 };
-  const valueOrder = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+  // Highest suit/value first
+  const suitOrder = { '♠': 3, '♥': 2, '♦': 1, '♣': 0 }; // Change order if you want a different suit priority
+  const valueOrder = ['A','K','Q','J','10','9','8','7','6','5','4','3','2']; // Highest to lowest
+
   return hand.slice().sort((a, b) => {
-    if (a.suit !== b.suit) return suitOrder[a.suit] - suitOrder[b.suit];
-    return valueOrder.indexOf(a.value) - valueOrder.indexOf(b.value);
+    if (a.suit !== b.suit) return suitOrder[b.suit] - suitOrder[a.suit]; // Descending suit
+    return valueOrder.indexOf(a.value) - valueOrder.indexOf(b.value);    // Descending value
   });
 }
+
 
 function askForTrump(roomId) {
   const room = rooms[roomId];
@@ -49,8 +58,10 @@ function askForTrump(roomId) {
   const numPlayers = room.maxPlayers;
   const previewCount = getPreviewCount(numPlayers);
 
-  // Deal only previewCount cards to chooser for preview
-  const hand = room.deck.slice(chooserIdx * previewCount, chooserIdx * previewCount + previewCount);
+  // Deal only previewCount cards to chooser for preview, and sort them
+  let hand = room.deck.slice(chooserIdx * previewCount, chooserIdx * previewCount + previewCount);
+  hand = sortHand(hand); // <-- Sort the preview hand
+
   room.hands[chooser.id] = hand;
 
   // Tell chooser to pick trump, show only preview cards
@@ -63,6 +74,7 @@ function askForTrump(roomId) {
     }
   });
 }
+
 
 io.on('connection', (socket) => {
   let currentRoomId = null;
@@ -107,7 +119,7 @@ io.on('connection', (socket) => {
     const room = rooms[roomId];
     if (room.players.length === room.maxPlayers && !room.started) {
       room.started = true;
-      room.deck = createShuffledDeck();
+      room.deck = createShuffledDeck(room.maxPlayers);
       room.hands = {};
       room.round = 0;
       room.trumpChooser = 0;
@@ -157,7 +169,7 @@ io.on('connection', (socket) => {
     if (room.trumpHistory.length < room.maxPlayers) {
       room.trumpChooser = (room.trumpChooser + 1) % room.maxPlayers;
       // Re-shuffle for next round
-      room.deck = createShuffledDeck();
+      room.deck = createShuffledDeck(room.maxPlayers);
       setTimeout(() => askForTrump(roomId), 3000); // wait 3s before next round
     } else {
       io.to(roomId).emit('gameEnded', { trumpHistory: room.trumpHistory });

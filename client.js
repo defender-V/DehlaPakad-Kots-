@@ -204,21 +204,38 @@ socket.on('cardPlayed', ({ player, card }) => {
 function showTrumpChooser(previewHand, suits) {
   const handDiv = document.getElementById('hand');
   handDiv.innerHTML = '<div><b>Select the trump suit for this round:</b></div>';
+
+  // Show preview cards
   previewHand.forEach(card => {
     const cardDiv = document.createElement('div');
     cardDiv.className = 'card';
     cardDiv.innerText = card.value + card.suit;
     handDiv.appendChild(cardDiv);
   });
-  const suitDiv = document.createElement('div');
+
+  // Create a centered overlay for suit selection
+  let tableDiv = document.getElementById('table');
+  let suitOverlay = document.getElementById('suitOverlay');
+  if (!suitOverlay) {
+    suitOverlay = document.createElement('div');
+    suitOverlay.id = 'suitOverlay';
+    suitOverlay.className = 'suit-overlay';
+    tableDiv.appendChild(suitOverlay);
+  }
+  suitOverlay.innerHTML = '';
+  suitOverlay.style.display = 'flex';
+
   suits.forEach(suit => {
     const btn = document.createElement('button');
+    btn.className = 'suit-btn';
     btn.innerText = suit;
     btn.onclick = () => {
       socket.emit('trumpChosen', { roomId: currentRoomId, trump: suit });
+      // Hide overlay and show waiting message
+      suitOverlay.style.display = 'none';
       handDiv.innerHTML = '<div>Waiting for other players...</div>';
     };
-    suitDiv.appendChild(btn);
+    suitOverlay.appendChild(btn);
   });
-  handDiv.appendChild(suitDiv);
 }
+
