@@ -118,19 +118,52 @@ socket.on("gameEnded", ({ trumpHistory }) => {
 function renderTable() {
   const tableDiv = document.getElementById("table");
   tableDiv.innerHTML = "";
-  const seatPositions = [
-    { top: "85%", left: "50%" }, // 0: bottom (self)
-    { top: "15%", left: "50%" }, // 1: top
-    { top: "50%", left: "15%" }, // 2: left
-    { top: "50%", left: "85%" }, // 3: right
-    { top: "30%", left: "20%" }, // 4: top-left
-    { top: "30%", left: "80%" }, // 5: top-right
-    { top: "70%", left: "20%" }, // 6: bottom-left
-    { top: "70%", left: "80%" }, // 7: bottom-right
-  ];
+
+  // Clockwise seat positions for each player count
+  const seatPositionsMap = {
+    2: [
+      { top: "85%", left: "50%" }, // 0: bottom (self)
+      { top: "15%", left: "50%" }  // 1: top
+    ],
+    4: [
+      { top: "85%", left: "50%" }, // 0: bottom (self)
+      { top: "50%", left: "10%" }, // 1: left
+      { top: "15%", left: "50%" }, // 2: top
+      { top: "50%", left: "90%" }  // 3: right
+    ],
+    6: [
+      { top: "85%", left: "50%" }, // 0: bottom (self)
+      { top: "70%", left: "20%" }, // 1: bottom-left
+      { top: "30%", left: "20%" }, // 2: top-left
+      { top: "15%", left: "50%" }, // 3: top
+      { top: "30%", left: "80%" }, // 4: top-right
+      { top: "70%", left: "80%" }  // 5: bottom-right
+    ],
+    8: [
+      { top: "85%", left: "50%" }, // 0: bottom (self)
+      { top: "75%", left: "25%" }, // 1: bottom-left
+      { top: "50%", left: "10%" }, // 2: left
+      { top: "25%", left: "25%" }, // 3: top-left
+      { top: "15%", left: "50%" }, // 4: top
+      { top: "25%", left: "75%" }, // 5: top-right
+      { top: "50%", left: "90%" }, // 6: right
+      { top: "75%", left: "75%" }  // 7: bottom-right
+    ]
+  };
+
+  const numPlayers = players.length;
+
+  // Find the next highest supported seat count
+  let seatCount = [2, 4, 6, 8].find(n => n >= numPlayers);
+  if (!seatCount) seatCount = 8; // fallback for >8
+
+  const seatPositions = seatPositionsMap[seatCount];
+
   players.forEach((p, i) => {
-    const relSeat = (i - mySeat + players.length) % players.length;
-    const pos = seatPositions[relSeat];
+    // Rotate so current player is always at the bottom (index 0)
+    const relSeat = (i - mySeat + numPlayers) % numPlayers;
+    // For extra players, wrap around seatPositions
+    const pos = seatPositions[relSeat % seatPositions.length];
     const playerDiv = document.createElement("div");
     playerDiv.className = "player-seat";
     playerDiv.style.top = pos.top;
@@ -140,6 +173,8 @@ function renderTable() {
     tableDiv.appendChild(playerDiv);
   });
 }
+
+
 
 // --- Shuffle Animation ---
 function showShuffleAnimation() {
