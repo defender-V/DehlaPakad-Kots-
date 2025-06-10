@@ -17,12 +17,51 @@ function createShuffledDeck() {
   const values = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
   let deck = [];
   for (let suit of suits) for (let value of values) deck.push({ suit, value });
-  // Shuffle
+  // Fisher-Yates shuffle
   for (let i = deck.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [deck[i], deck[j]] = [deck[j], deck[i]];
   }
   return deck;
+}
+
+function getPreviewCount(numPlayers) {
+  if (numPlayers === 2) return 8;
+  if (numPlayers === 4) return 5;
+  if (numPlayers === 6) return 4;
+  if (numPlayers === 8) return 4;
+  return 8;
+}
+
+function sortHand(hand) {
+  const suitOrder = { '♠': 0, '♥': 1, '♦': 2, '♣': 3 };
+  const valueOrder = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+  return hand.slice().sort((a, b) => {
+    if (a.suit !== b.suit) return suitOrder[a.suit] - suitOrder[b.suit];
+    return valueOrder.indexOf(a.value) - valueOrder.indexOf(b.value);
+  });
+}
+
+function askForTrump(roomId) {
+  const room = rooms[roomId];
+  const chooserIdx = room.trumpChooser;
+  const chooser = room.players[chooserIdx];
+  const numPlayers = room.maxPlayers;
+  const previewCount = getPreviewCount(numPlayers);
+
+  // Deal only previewCount cards to chooser for preview
+  const hand = room.deck.slice(chooserIdx * previewCount, chooserIdx * previewCount + previewCount);
+  room.hands[chooser.id] = hand;
+
+  // Tell chooser to pick trump, show only preview cards
+  io.to(chooser.id).emit('chooseTrump', { previewHand: hand, suits: ['♠', '♥', '♦', '♣'] });
+
+  // Tell others to wait
+  room.players.forEach((p, idx) => {
+    if (idx !== chooserIdx) {
+      io.to(p.id).emit('waitingForTrump', { chooser: chooser.name });
+    }
+  });
 }
 
 io.on('connection', (socket) => {
@@ -36,7 +75,11 @@ io.on('connection', (socket) => {
       maxPlayers: parseInt(numPlayers, 10),
       started: false,
       deck: [],
-      hands: {}
+      hands: {},
+      round: 0,
+      trumpChooser: 0,
+      trumpHistory: [],
+      trump: null
     };
     currentRoomId = roomId;
     currentPlayerName = playerName;
@@ -61,38 +104,71 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('updatePlayers', rooms[roomId].players);
 
     // If room is now full, start the game
-    if (rooms[roomId].players.length === rooms[roomId].maxPlayers && !rooms[roomId].started) {
-      rooms[roomId].started = true;
-      // Shuffle and deal
-      const deck = createShuffledDeck();
-      rooms[roomId].deck = deck;
-      const handSize = Math.floor(deck.length / rooms[roomId].maxPlayers);
-      rooms[roomId].hands = {};
-      rooms[roomId].players.forEach((player, idx) => {
-        rooms[roomId].hands[player.id] = deck.slice(idx * handSize, (idx + 1) * handSize);
+    const room = rooms[roomId];
+    if (room.players.length === room.maxPlayers && !room.started) {
+      room.started = true;
+      room.deck = createShuffledDeck();
+      room.hands = {};
+      room.round = 0;
+      room.trumpChooser = 0;
+      room.trumpHistory = [];
+      room.trump = null;
+
+      io.to(roomId).emit('startGame', {});
+      setTimeout(() => askForTrump(roomId), 2000); // 2s shuffle animation
+    }
+  });
+
+  socket.on('trumpChosen', ({ roomId, trump }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    room.trump = trump;
+    room.trumpHistory.push(trump);
+
+    // Now deal all cards and sort for each player
+    const numPlayers = room.maxPlayers;
+    const totalCards = 52;
+    const handSize = Math.floor(totalCards / numPlayers);
+
+    for (let i = 0; i < numPlayers; i++) {
+      const player = room.players[i];
+      let start = i * handSize;
+      let end = (i + 1) * handSize;
+      let playerHand = room.deck.slice(start, end);
+      playerHand = sortHand(playerHand);
+      room.hands[player.id] = playerHand;
+      io.to(player.id).emit('dealHand', {
+        hand: playerHand,
+        seat: i,
+        players: room.players.map((p, idx) => ({
+          name: p.name,
+          seat: idx,
+          isSelf: p.id === player.id
+        })),
+        roomId,
+        trump
       });
-      io.to(roomId).emit('startGame', { handSize }); // Notify clients to animate shuffling
-      setTimeout(() => {
-        // After animation, send hands (and seat info)
-        rooms[roomId].players.forEach((player, idx) => {
-          io.to(player.id).emit('dealHand', {
-            hand: rooms[roomId].hands[player.id],
-            seat: idx,
-            players: rooms[roomId].players.map((p, i) => ({
-              name: p.name,
-              seat: i,
-              isSelf: p.id === player.id
-            })),
-            roomId
-          });
-        });
-      }, 2000); // 2s shuffle animation
+    }
+
+    // Notify all players of the chosen trump
+    io.to(roomId).emit('trumpSet', { trump });
+
+    // Next round: if all have chosen trump, end game; else, ask next
+    if (room.trumpHistory.length < room.maxPlayers) {
+      room.trumpChooser = (room.trumpChooser + 1) % room.maxPlayers;
+      // Re-shuffle for next round
+      room.deck = createShuffledDeck();
+      setTimeout(() => askForTrump(roomId), 3000); // wait 3s before next round
+    } else {
+      io.to(roomId).emit('gameEnded', { trumpHistory: room.trumpHistory });
+      delete rooms[roomId];
     }
   });
 
   socket.on('playCard', ({ roomId, card }) => {
-    if (rooms[roomId]) {
-      const player = rooms[roomId].players.find(p => p.id === socket.id);
+    const room = rooms[roomId];
+    if (room) {
+      const player = room.players.find(p => p.id === socket.id);
       io.to(roomId).emit('cardPlayed', { player, card });
     }
   });

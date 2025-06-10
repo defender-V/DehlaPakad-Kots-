@@ -4,6 +4,7 @@ let currentRoomId = '';
 let mySeat = 0;
 let players = [];
 let hand = [];
+let currentTrump = null;
 
 function showRoomOptions() {
   playerName = document.getElementById('playerName').value.trim();
@@ -73,18 +74,40 @@ function showGameRoom(roomId, pList) {
 }
 
 // --- Game Start and Dealing ---
-socket.on('startGame', ({ handSize }) => {
-  showShuffleAnimation(handSize);
+socket.on('startGame', () => {
+  showShuffleAnimation();
 });
 
-socket.on('dealHand', ({ hand: dealtHand, seat, players: playerList, roomId }) => {
+socket.on('chooseTrump', ({ previewHand, suits }) => {
+  hideShuffleAnimation();
+  showTrumpChooser(previewHand, suits);
+});
+
+socket.on('waitingForTrump', ({ chooser }) => {
+  hideShuffleAnimation();
+  const handDiv = document.getElementById('hand');
+  handDiv.innerHTML = `<div>Waiting for <b>${chooser}</b> to choose the trump suit...</div>`;
+});
+
+socket.on('trumpSet', ({ trump }) => {
+  currentTrump = trump;
+  const handDiv = document.getElementById('hand');
+  handDiv.innerHTML += `<div>Trump suit for this round: <b>${trump}</b></div>`;
+});
+
+socket.on('dealHand', ({ hand: dealtHand, seat, players: playerList, roomId, trump }) => {
   mySeat = seat;
   players = playerList;
   currentRoomId = roomId;
+  currentTrump = trump;
   renderTable();
-  hideShuffleAnimation();
   hand = dealtHand;
   renderHand();
+});
+
+socket.on('gameEnded', ({ trumpHistory }) => {
+  const handDiv = document.getElementById('hand');
+  handDiv.innerHTML = `<div>Game Over! Trump suits chosen: ${trumpHistory.join(', ')}</div>`;
 });
 
 function renderTable() {
@@ -101,7 +124,6 @@ function renderTable() {
     { top: '70%', left: '80%' }  // 7: bottom-right
   ];
   players.forEach((p, i) => {
-    // Calculate seat relative to mySeat so I am always at the bottom
     const relSeat = (i - mySeat + players.length) % players.length;
     const pos = seatPositions[relSeat];
     const playerDiv = document.createElement('div');
@@ -109,13 +131,13 @@ function renderTable() {
     playerDiv.style.top = pos.top;
     playerDiv.style.left = pos.left;
     playerDiv.style.transform = 'translate(-50%, -50%)';
-    playerDiv.innerText = p.name + (p.isSelf ? ' (You)' : (relSeat === 1 ? ' (Opposite)' : ''));
+    playerDiv.innerText = p.name + (p.isSelf ? ' (You)' : '');
     tableDiv.appendChild(playerDiv);
   });
 }
 
 // --- Shuffle Animation ---
-function showShuffleAnimation(handSize) {
+function showShuffleAnimation() {
   const tableDiv = document.getElementById('table');
   let shuffleDiv = document.getElementById('shuffleArea');
   if (!shuffleDiv) {
@@ -157,13 +179,15 @@ function hideShuffleAnimation() {
 function renderHand() {
   const handDiv = document.getElementById('hand');
   handDiv.innerHTML = '';
-  hand.forEach((card, idx) => {
-    const cardDiv = document.createElement('div');
-    cardDiv.className = 'card';
-    cardDiv.innerText = card.value + card.suit;
-    cardDiv.onclick = () => playCard(idx);
-    handDiv.appendChild(cardDiv);
-  });
+  if (hand && hand.length) {
+    hand.forEach((card, idx) => {
+      const cardDiv = document.createElement('div');
+      cardDiv.className = 'card';
+      cardDiv.innerText = card.value + card.suit;
+      cardDiv.onclick = () => playCard(idx);
+      handDiv.appendChild(cardDiv);
+    });
+  }
 }
 
 function playCard(idx) {
@@ -175,3 +199,26 @@ function playCard(idx) {
 socket.on('cardPlayed', ({ player, card }) => {
   alert(`Player ${player.name} played ${card.value}${card.suit}`);
 });
+
+// --- Trump Chooser UI ---
+function showTrumpChooser(previewHand, suits) {
+  const handDiv = document.getElementById('hand');
+  handDiv.innerHTML = '<div><b>Select the trump suit for this round:</b></div>';
+  previewHand.forEach(card => {
+    const cardDiv = document.createElement('div');
+    cardDiv.className = 'card';
+    cardDiv.innerText = card.value + card.suit;
+    handDiv.appendChild(cardDiv);
+  });
+  const suitDiv = document.createElement('div');
+  suits.forEach(suit => {
+    const btn = document.createElement('button');
+    btn.innerText = suit;
+    btn.onclick = () => {
+      socket.emit('trumpChosen', { roomId: currentRoomId, trump: suit });
+      handDiv.innerHTML = '<div>Waiting for other players...</div>';
+    };
+    suitDiv.appendChild(btn);
+  });
+  handDiv.appendChild(suitDiv);
+}
