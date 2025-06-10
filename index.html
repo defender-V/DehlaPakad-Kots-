@@ -39,7 +39,15 @@
   <div id="game-room" style="display:none; position:relative; width:100%; height:600px;">
     <div id="roomHeader"></div>
     <div id="table" style="width:100%; height:100%; position:relative;"></div>
+    
+    <!-- NEW: Pile area for played cards -->
+    <div id="pile" style="width:100%; text-align:center; margin: 20px 0;"></div>
+    
+    <!-- Hand area for the player's own cards -->
     <div id="hand"></div>
+    
+    <!-- Winner notification area -->
+    <div id="winnerNotification" style="display:none; text-align:center; font-size:1.3em; color:#1976d2; margin-top:20px;"></div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>

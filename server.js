@@ -1,8 +1,9 @@
-const express = require('express');
-const http = require('http');
-const socketIo = require('socket.io');
-const path = require('path');
-const { v4: uuidv4 } = require('uuid');
+const express = require("express");
+const http = require("http");
+const socketIo = require("socket.io");
+const path = require("path");
+const { v4: uuidv4 } = require("uuid");
+const { createShuffledDeck, sortHand } = require("./gameLogic");
 
 const app = express();
 const server = http.createServer(app);
@@ -12,25 +13,6 @@ app.use(express.static(__dirname));
 
 let rooms = {};
 
-function createShuffledDeck(numPlayers) {
-  const suits = ['♠', '♥', '♦', '♣'];
-  const values = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
-  let deck = [];
-  for (let suit of suits) {
-    for (let value of values) {
-      // Remove all 2's if 6 or 8 players
-      if ((numPlayers === 6 || numPlayers === 8) && value === '2') continue;
-      deck.push({ suit, value });
-    }
-  }
-  // Shuffle
-  for (let i = deck.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [deck[i], deck[j]] = [deck[j], deck[i]];
-  }
-  return deck;
-}
-
 function getPreviewCount(numPlayers) {
   if (numPlayers === 2) return 8;
   if (numPlayers === 4) return 5;
@@ -38,18 +20,6 @@ function getPreviewCount(numPlayers) {
   if (numPlayers === 8) return 4;
   return 8;
 }
-
-function sortHand(hand) {
-  // Highest suit/value first
-  const suitOrder = { '♠': 3, '♥': 2, '♦': 1, '♣': 0 }; // Change order if you want a different suit priority
-  const valueOrder = ['A','K','Q','J','10','9','8','7','6','5','4','3','2']; // Highest to lowest
-
-  return hand.slice().sort((a, b) => {
-    if (a.suit !== b.suit) return suitOrder[b.suit] - suitOrder[a.suit]; // Descending suit
-    return valueOrder.indexOf(a.value) - valueOrder.indexOf(b.value);    // Descending value
-  });
-}
-
 
 function askForTrump(roomId) {
   const room = rooms[roomId];
@@ -59,28 +29,33 @@ function askForTrump(roomId) {
   const previewCount = getPreviewCount(numPlayers);
 
   // Deal only previewCount cards to chooser for preview, and sort them
-  let hand = room.deck.slice(chooserIdx * previewCount, chooserIdx * previewCount + previewCount);
+  let hand = room.deck.slice(
+    chooserIdx * previewCount,
+    chooserIdx * previewCount + previewCount
+  );
   hand = sortHand(hand); // <-- Sort the preview hand
 
   room.hands[chooser.id] = hand;
 
   // Tell chooser to pick trump, show only preview cards
-  io.to(chooser.id).emit('chooseTrump', { previewHand: hand, suits: ['♠', '♥', '♦', '♣'] });
+  io.to(chooser.id).emit("chooseTrump", {
+    previewHand: hand,
+    suits: ["♠", "♥", "♦", "♣"],
+  });
 
   // Tell others to wait
   room.players.forEach((p, idx) => {
     if (idx !== chooserIdx) {
-      io.to(p.id).emit('waitingForTrump', { chooser: chooser.name });
+      io.to(p.id).emit("waitingForTrump", { chooser: chooser.name });
     }
   });
 }
 
-
-io.on('connection', (socket) => {
+io.on("connection", (socket) => {
   let currentRoomId = null;
   let currentPlayerName = null;
 
-  socket.on('createRoom', ({ playerName, numPlayers }) => {
+  socket.on("createRoom", ({ playerName, numPlayers }) => {
     const roomId = uuidv4().slice(0, 6);
     rooms[roomId] = {
       players: [{ id: socket.id, name: playerName }],
@@ -91,29 +66,35 @@ io.on('connection', (socket) => {
       round: 0,
       trumpChooser: 0,
       trumpHistory: [],
-      trump: null
+      trump: null,
     };
     currentRoomId = roomId;
     currentPlayerName = playerName;
     socket.join(roomId);
-    io.to(roomId).emit('roomCreated', { roomId, players: rooms[roomId].players });
+    io.to(roomId).emit("roomCreated", {
+      roomId,
+      players: rooms[roomId].players,
+    });
   });
 
-  socket.on('joinRoom', ({ playerName, roomId }) => {
+  socket.on("joinRoom", ({ playerName, roomId }) => {
     if (!rooms[roomId]) {
-      socket.emit('roomError', 'Room does not exist!');
+      socket.emit("roomError", "Room does not exist!");
       return;
     }
     if (rooms[roomId].players.length >= rooms[roomId].maxPlayers) {
-      socket.emit('roomError', 'Room is full!');
+      socket.emit("roomError", "Room is full!");
       return;
     }
     rooms[roomId].players.push({ id: socket.id, name: playerName });
     currentRoomId = roomId;
     currentPlayerName = playerName;
     socket.join(roomId);
-    io.to(roomId).emit('roomJoined', { roomId, players: rooms[roomId].players });
-    io.to(roomId).emit('updatePlayers', rooms[roomId].players);
+    io.to(roomId).emit("roomJoined", {
+      roomId,
+      players: rooms[roomId].players,
+    });
+    io.to(roomId).emit("updatePlayers", rooms[roomId].players);
 
     // If room is now full, start the game
     const room = rooms[roomId];
@@ -126,12 +107,12 @@ io.on('connection', (socket) => {
       room.trumpHistory = [];
       room.trump = null;
 
-      io.to(roomId).emit('startGame', {});
+      io.to(roomId).emit("startGame", {});
       setTimeout(() => askForTrump(roomId), 2000); // 2s shuffle animation
     }
   });
 
-  socket.on('trumpChosen', ({ roomId, trump }) => {
+  socket.on("trumpChosen", ({ roomId, trump }) => {
     const room = rooms[roomId];
     if (!room) return;
     room.trump = trump;
@@ -149,21 +130,21 @@ io.on('connection', (socket) => {
       let playerHand = room.deck.slice(start, end);
       playerHand = sortHand(playerHand);
       room.hands[player.id] = playerHand;
-      io.to(player.id).emit('dealHand', {
+      io.to(player.id).emit("dealHand", {
         hand: playerHand,
         seat: i,
         players: room.players.map((p, idx) => ({
           name: p.name,
           seat: idx,
-          isSelf: p.id === player.id
+          isSelf: p.id === player.id,
         })),
         roomId,
-        trump
+        trump,
       });
     }
 
     // Notify all players of the chosen trump
-    io.to(roomId).emit('trumpSet', { trump });
+    io.to(roomId).emit("trumpSet", { trump });
 
     // Next round: if all have chosen trump, end game; else, ask next
     if (room.trumpHistory.length < room.maxPlayers) {
@@ -172,23 +153,25 @@ io.on('connection', (socket) => {
       room.deck = createShuffledDeck(room.maxPlayers);
       setTimeout(() => askForTrump(roomId), 3000); // wait 3s before next round
     } else {
-      io.to(roomId).emit('gameEnded', { trumpHistory: room.trumpHistory });
+      io.to(roomId).emit("gameEnded", { trumpHistory: room.trumpHistory });
       delete rooms[roomId];
     }
   });
 
-  socket.on('playCard', ({ roomId, card }) => {
+  socket.on("playCard", ({ roomId, card }) => {
     const room = rooms[roomId];
     if (room) {
-      const player = room.players.find(p => p.id === socket.id);
-      io.to(roomId).emit('cardPlayed', { player, card });
+      const player = room.players.find((p) => p.id === socket.id);
+      io.to(roomId).emit("cardPlayed", { player, card });
     }
   });
 
-  socket.on('disconnect', () => {
+  socket.on("disconnect", () => {
     if (currentRoomId && rooms[currentRoomId]) {
-      rooms[currentRoomId].players = rooms[currentRoomId].players.filter(p => p.id !== socket.id);
-      io.to(currentRoomId).emit('updatePlayers', rooms[currentRoomId].players);
+      rooms[currentRoomId].players = rooms[currentRoomId].players.filter(
+        (p) => p.id !== socket.id
+      );
+      io.to(currentRoomId).emit("updatePlayers", rooms[currentRoomId].players);
       if (rooms[currentRoomId].players.length === 0) {
         delete rooms[currentRoomId];
       }
@@ -196,4 +179,4 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(3000, () => console.log('Server running on port 3000'));
+server.listen(3000, () => console.log("Server running on port 3000"));
