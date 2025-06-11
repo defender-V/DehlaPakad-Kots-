@@ -50,7 +50,14 @@ body { font-family: Arial, sans-serif; background: #f0f0f0; }
   transition: transform 0.3s;
 }
 
-
+#playedCards {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 18px;
+  min-height: 120px;
+  margin: 20px 0;
+}
 .card-svg-container {
   display: inline-block;
   transition: transform 0.1s;

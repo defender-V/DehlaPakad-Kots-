@@ -221,15 +221,13 @@ function hideShuffleAnimation() {
 
 // --- Hand Rendering (only show own cards) ---
 
-function getCardSVG(card, isMyTurn) {
-  // Suit symbols and colors
+function getCardSVG(card, isMyTurn, forceFullOpacity = false) {
   const suitSymbols = { '♠': '♠', '♥': '♥', '♦': '♦', '♣': '♣' };
   const isRed = card.suit === '♥' || card.suit === '♦';
   const color = isRed ? '#d00' : '#222';
-
-  // SVG template for a card
+  const opacity = forceFullOpacity ? '1' : (isMyTurn ? '1' : '0.5');
   return `
-    <svg width="70" height="100" viewBox="0 0 70 100" style="margin:5px;${isMyTurn ? '' : 'opacity:0.5;'}">
+    <svg width="70" height="100" viewBox="0 0 70 100" style="margin:5px;opacity:${opacity};">
       <rect x="2" y="2" rx="10" ry="10" width="66" height="96" fill="#fff" stroke="#222" stroke-width="2"/>
       <text x="10" y="20" font-size="16" font-family="Georgia" fill="${color}" font-weight="bold">${card.value}</text>
       <text x="10" y="35" font-size="18" font-family="Georgia" fill="${color}">${suitSymbols[card.suit]}</text>
@@ -240,6 +238,9 @@ function getCardSVG(card, isMyTurn) {
   `;
 }
 
+let cardSelectionLocked = false;
+
+
 function renderHand() {
   const handDiv = document.getElementById("hand");
   handDiv.innerHTML = "";
@@ -247,8 +248,8 @@ function renderHand() {
     hand.forEach((card, idx) => {
       const cardContainer = document.createElement("div");
       cardContainer.className = "card-svg-container";
-      cardContainer.innerHTML = getCardSVG(card, isMyTurn);
-      if (isMyTurn) {
+      cardContainer.innerHTML = getCardSVG(card, isMyTurn && !cardSelectionLocked);
+      if (isMyTurn && !cardSelectionLocked) {
         cardContainer.onclick = () => playCard(idx);
         cardContainer.style.cursor = "pointer";
       } else {
@@ -262,10 +263,14 @@ function renderHand() {
 
 
 
+
 function playCard(idx) {
+  if (cardSelectionLocked) return; // Prevent double selection
+  cardSelectionLocked = true;
+  renderHand(); // Immediately disable further clicks
   socket.emit('playCard', { roomId: currentRoomId, cardIndex: idx });
-  // Do NOT remove the card from hand here.
 }
+
 
 
 // socket.on("cardPlayed", ({ player, card }) => {
@@ -318,20 +323,25 @@ let isMyTurn = false;
 
 socket.on('yourTurn', () => {
   isMyTurn = true;
+  cardSelectionLocked = false;
   renderHand();
 });
 
 socket.on('handStarted', ({ starter, currentPlayer }) => {
   isMyTurn = (players[currentPlayer] && players[currentPlayer].id === socket.id);
+  cardSelectionLocked = false;
   const handDiv = document.getElementById('hand');
   handDiv.innerHTML += `<div><b>${starter}</b> starts this hand</div>`;
   renderHand();
 });
+
 socket.on('turnChanged', ({ currentTurn, pile }) => {
   isMyTurn = (players[currentTurn] && players[currentTurn].id === socket.id);
+  cardSelectionLocked = false;
   updatePileUI(pile);
   renderHand();
 });
+
 
 
 socket.on('notYourTurn', () => {
@@ -340,7 +350,10 @@ socket.on('notYourTurn', () => {
 
 socket.on('invalidCard', ({ message }) => {
   alert(message);
+  cardSelectionLocked = false;
+  renderHand();
 });
+
 
 socket.on('cardPlayed', ({ player, card, playedCards }) => {
   // Update UI to show played cards in center
@@ -380,13 +393,14 @@ function updatePlayedCards(playedCards) {
   }
   playedDiv.innerHTML = '';
   playedCards.forEach(pc => {
-    const cardDiv = document.createElement('div');
-    cardDiv.className = 'played-card';
-    cardDiv.innerText = pc.card.value + pc.card.suit;
-    cardDiv.title = pc.playerName;
-    playedDiv.appendChild(cardDiv);
-  });
+  const cardContainer = document.createElement('div');
+  cardContainer.className = "card-svg-container";
+  cardContainer.innerHTML = getCardSVG(pc.card, true, true); // Always full opacity for table
+  cardContainer.title = pc.playerName;
+  playedDiv.appendChild(cardContainer);
+});
 }
+
 
 socket.on('updateHand', (newHand) => {
   hand = newHand;
