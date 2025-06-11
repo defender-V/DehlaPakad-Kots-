@@ -220,27 +220,46 @@ function hideShuffleAnimation() {
 }
 
 // --- Hand Rendering (only show own cards) ---
+
+function getCardSVG(card, isMyTurn) {
+  // Suit symbols and colors
+  const suitSymbols = { '♠': '♠', '♥': '♥', '♦': '♦', '♣': '♣' };
+  const isRed = card.suit === '♥' || card.suit === '♦';
+  const color = isRed ? '#d00' : '#222';
+
+  // SVG template for a card
+  return `
+    <svg width="70" height="100" viewBox="0 0 70 100" style="margin:5px;${isMyTurn ? '' : 'opacity:0.5;'}">
+      <rect x="2" y="2" rx="10" ry="10" width="66" height="96" fill="#fff" stroke="#222" stroke-width="2"/>
+      <text x="10" y="20" font-size="16" font-family="Georgia" fill="${color}" font-weight="bold">${card.value}</text>
+      <text x="10" y="35" font-size="18" font-family="Georgia" fill="${color}">${suitSymbols[card.suit]}</text>
+      <text x="60" y="95" font-size="16" font-family="Georgia" fill="${color}" font-weight="bold" transform="rotate(180 60,95)">${card.value}</text>
+      <text x="60" y="80" font-size="18" font-family="Georgia" fill="${color}" transform="rotate(180 60,80)">${suitSymbols[card.suit]}</text>
+      <text x="35" y="60" font-size="36" font-family="Georgia" fill="${color}" text-anchor="middle" alignment-baseline="middle">${suitSymbols[card.suit]}</text>
+    </svg>
+  `;
+}
+
 function renderHand() {
   const handDiv = document.getElementById("hand");
   handDiv.innerHTML = "";
   if (hand && hand.length) {
     hand.forEach((card, idx) => {
-      const cardDiv = document.createElement("div");
-      cardDiv.className = "card";
-      cardDiv.innerText = card.value + card.suit;
+      const cardContainer = document.createElement("div");
+      cardContainer.className = "card-svg-container";
+      cardContainer.innerHTML = getCardSVG(card, isMyTurn);
       if (isMyTurn) {
-        cardDiv.onclick = () => playCard(idx);
-        cardDiv.style.cursor = "pointer";
-        cardDiv.style.opacity = "1";
+        cardContainer.onclick = () => playCard(idx);
+        cardContainer.style.cursor = "pointer";
       } else {
-        cardDiv.onclick = null;
-        cardDiv.style.cursor = "not-allowed";
-        cardDiv.style.opacity = "0.5";
+        cardContainer.onclick = null;
+        cardContainer.style.cursor = "not-allowed";
       }
-      handDiv.appendChild(cardDiv);
+      handDiv.appendChild(cardContainer);
     });
   }
 }
+
 
 
 function playCard(idx) {
