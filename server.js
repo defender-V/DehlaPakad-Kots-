@@ -81,7 +81,8 @@ io.on('connection', (socket) => {
   handStarter: 0,
   currentHand: null,
   teamHandsWon: { 'Team 1': 0, 'Team 2': 0 },
-  teamRoundsWon: { 'Team 1': 0, 'Team 2': 0 } // Add this line
+  teamRoundsWon: { 'Team 1': 0, 'Team 2': 0 }, // Add this line
+  teamTensWon: { 'Team 1': 0, 'Team 2': 0 }
 };
 
     currentRoomId = roomId;
@@ -118,6 +119,7 @@ io.on('connection', (socket) => {
       room.handStarter = 0;
       room.teamHandsWon = { 'Team 1': 0, 'Team 2': 0 };
       room.teamRoundsWon= { 'Team 1': 0, 'Team 2': 0 };
+      room.teamTensWon= { 'Team 1': 0, 'Team 2': 0 }
 
       io.to(roomId).emit('startGame', {});
       setTimeout(() => askForTrump(roomId), 2000);
@@ -197,58 +199,87 @@ io.on('connection', (socket) => {
     });
 
     if (room.currentHand.playedCards.length === room.maxPlayers) {
-      const winnerIdx = determineHandWinner(
-        room.currentHand.playedCards, 
-        room.currentHand.leadSuit, 
-        room.trump
-      );
-      const winner = room.currentHand.playedCards[winnerIdx];
-      const winnerPlayerIdx = room.players.findIndex(p => p.id === winner.playerId);
-      const winnerTeam = getPlayerTeam(winnerPlayerIdx);
-      
-      room.teamHandsWon[winnerTeam]++;
-      room.handStarter = winnerPlayerIdx;
+  const winnerIdx = determineHandWinner(
+    room.currentHand.playedCards, 
+    room.currentHand.leadSuit, 
+    room.trump
+  );
+  const winner = room.currentHand.playedCards[winnerIdx];
+  const winnerPlayerIdx = room.players.findIndex(p => p.id === winner.playerId);
+  const winnerTeam = getPlayerTeam(winnerPlayerIdx);
+  
+  room.teamHandsWon[winnerTeam]++;
+  
+  // Count ALL tens in the pile and award them to the winning team
+  const tensInPile = room.currentHand.playedCards.filter(pc => pc.card.value === '10').length;
+  room.teamTensWon[winnerTeam] += tensInPile;
+  
+  room.handStarter = winnerPlayerIdx;
 
-      io.to(roomId).emit('handWon', {
-  winner: winner.playerName,
-  winningCard: winner.card,
-  playedCards: room.currentHand.playedCards,
-  teamHandsWon: room.teamHandsWon,
-  teamRoundsWon: room.teamRoundsWon, // Add this line
-  winnerTeam: winnerTeam
-});
+  io.to(roomId).emit('handWon', {
+    winner: winner.playerName,
+    winningCard: winner.card,
+    playedCards: room.currentHand.playedCards,
+    teamHandsWon: room.teamHandsWon,
+    teamRoundsWon: room.teamRoundsWon,
+    teamTensWon: room.teamTensWon,
+    tensInPile: tensInPile, // Add this to show how many tens were won
+    winnerTeam: winnerTeam
+  });
 
-
-      // Send updated hands to ALL players
-      room.players.forEach(player => {
-        io.to(player.id).emit('updateHand', room.hands[player.id]);
-      });
+  // Send updated hands to ALL players
+  room.players.forEach(player => {
+    io.to(player.id).emit('updateHand', room.hands[player.id]);
+  });
 
       const anyCardsLeft = Object.values(room.hands).some(hand => hand.length > 0);
 if (!anyCardsLeft) {
-  // Round is over - determine round winner
+  // Round is over - determine round winner based on tens first, then hands
+  const team1Tens = room.teamTensWon['Team 1'];
+  const team2Tens = room.teamTensWon['Team 2'];
   const team1Hands = room.teamHandsWon['Team 1'];
   const team2Hands = room.teamHandsWon['Team 2'];
-  let roundWinner = null;
   
-  if (team1Hands > team2Hands) {
+  let roundWinner = null;
+  let winReason = '';
+  
+  if (team1Tens > team2Tens) {
     roundWinner = 'Team 1';
     room.teamRoundsWon['Team 1']++;
-  } else if (team2Hands > team1Hands) {
+    winReason = `more tens (${team1Tens} vs ${team2Tens})`;
+  } else if (team2Tens > team1Tens) {
     roundWinner = 'Team 2';
     room.teamRoundsWon['Team 2']++;
+    winReason = `more tens (${team2Tens} vs ${team1Tens})`;
+  } else {
+    // Tens are tied, check hands
+    if (team1Hands > team2Hands) {
+      roundWinner = 'Team 1';
+      room.teamRoundsWon['Team 1']++;
+      winReason = `tied tens (${team1Tens} each), more hands (${team1Hands} vs ${team2Hands})`;
+    } else if (team2Hands > team1Hands) {
+      roundWinner = 'Team 2';
+      room.teamRoundsWon['Team 2']++;
+      winReason = `tied tens (${team1Tens} each), more hands (${team2Hands} vs ${team1Hands})`;
+    } else {
+      // Complete tie - no points awarded
+      winReason = `complete tie (${team1Tens} tens, ${team1Hands} hands each)`;
+    }
   }
-  // If tied, no one wins the round
 
-  // Emit round end with winner
+  // Emit round end with winner and reason
   io.to(roomId).emit('roundEnded', {
     roundWinner: roundWinner,
+    winReason: winReason,
     teamHandsWon: room.teamHandsWon,
-    teamRoundsWon: room.teamRoundsWon
+    teamRoundsWon: room.teamRoundsWon,
+    teamTensWon: room.teamTensWon
   });
 
-  // Reset hands won for next round
+  // Reset hands and tens won for next round
   room.teamHandsWon = { 'Team 1': 0, 'Team 2': 0 };
+  room.teamTensWon = { 'Team 1': 0, 'Team 2': 0 };
+
 
   if (room.trumpHistory.length < room.maxPlayers) {
     room.trumpChooser = (room.trumpChooser + 1) % room.maxPlayers;
@@ -262,6 +293,7 @@ if (!anyCardsLeft) {
     delete rooms[roomId];
   }
 }
+
  else {
         setTimeout(() => startNewHand(roomId), 2000);
       }

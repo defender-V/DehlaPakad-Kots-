@@ -9,6 +9,7 @@ let currentTrump = null;
 // Add these variables after your existing declarations
 let teamHandsWon = { 'Team 1': 0, 'Team 2': 0 };
 let teamRoundsWon = { 'Team 1': 0, 'Team 2': 0 }; // Add this line
+let teamTensWon = { 'Team 1': 0, 'Team 2': 0 };
 
 // Team functions
 function getTeams(players) {
@@ -27,14 +28,18 @@ function updateTeamDisplay() {
     `<div style="margin-bottom: 10px;">
        <b>Team 1</b> (${team1.join(', ')}): 
        <span style="color: #1976d2;">${teamRoundsWon['Team 1']} rounds</span> | 
+       <span style="color: #d2691e;">${teamTensWon['Team 1']} tens</span> | 
        <span style="color: #666;">${teamHandsWon['Team 1']} hands</span>
      </div>
      <div>
        <b>Team 2</b> (${team2.join(', ')}): 
        <span style="color: #1976d2;">${teamRoundsWon['Team 2']} rounds</span> | 
+       <span style="color: #d2691e;">${teamTensWon['Team 2']} tens</span> | 
        <span style="color: #666;">${teamHandsWon['Team 2']} hands</span>
      </div>`;
 }
+
+
 
 
 function updateTurnUI(currentTurnId) {
@@ -105,7 +110,8 @@ socket.on("roomError", (msg) => {
 socket.on("updatePlayers", (pList) => {
   players = pList;
   teamHandsWon = { 'Team 1': 0, 'Team 2': 0 };
-  teamRoundsWon = { 'Team 1': 0, 'Team 2': 0 }; // Add this line
+  teamRoundsWon = { 'Team 1': 0, 'Team 2': 0 };
+  teamTensWon = { 'Team 1': 0, 'Team 2': 0 }; // Add this line
   renderTable();
   updateTeamDisplay();
 });
@@ -406,37 +412,47 @@ socket.on('invalidCard', ({ message }) => {
   renderHand();
 });
 
-socket.on('roundEnded', ({ roundWinner, teamHandsWon: teamHandsWonFromServer, teamRoundsWon: teamRoundsWonFromServer }) => {
+socket.on('roundEnded', ({ roundWinner, winReason, teamHandsWon: teamHandsWonFromServer, teamRoundsWon: teamRoundsWonFromServer, teamTensWon: teamTensWonFromServer }) => {
   teamHandsWon = teamHandsWonFromServer || teamHandsWon;
   teamRoundsWon = teamRoundsWonFromServer || teamRoundsWon;
+  teamTensWon = teamTensWonFromServer || teamTensWon;
   updateTeamDisplay();
 
   const winnerDiv = document.getElementById('winnerNotification');
   winnerDiv.style.display = 'block';
   if (roundWinner) {
-    winnerDiv.innerHTML = `<b style="font-size: 1.5em;">${roundWinner} wins the round!</b>`;
+    winnerDiv.innerHTML = `<b style="font-size: 1.5em;">${roundWinner} wins the round!</b><br><small>${winReason}</small>`;
   } else {
-    winnerDiv.innerHTML = `<b style="font-size: 1.5em;">Round tied!</b>`;
+    winnerDiv.innerHTML = `<b style="font-size: 1.5em;">Round tied!</b><br><small>${winReason}</small>`;
   }
 
   setTimeout(() => {
     winnerDiv.style.display = 'none';
-  }, 3000);
+  }, 4000); // Longer timeout to read the reason
 });
+
 
 socket.on('cardPlayed', ({ player, card, playedCards }) => {
   // Update UI to show played cards in center
   updatePlayedCards(playedCards);
 });
 
-socket.on('handWon', ({ winner, winningCard, playedCards, teamHandsWon: teamHandsWonFromServer, teamRoundsWon: teamRoundsWonFromServer, winnerTeam }) => {
+socket.on('handWon', ({ winner, winningCard, playedCards, teamHandsWon: teamHandsWonFromServer, teamRoundsWon: teamRoundsWonFromServer, teamTensWon: teamTensWonFromServer, tensInPile, winnerTeam }) => {
   teamHandsWon = teamHandsWonFromServer || teamHandsWon;
-  teamRoundsWon = teamRoundsWonFromServer || teamRoundsWon; // Add this line
+  teamRoundsWon = teamRoundsWonFromServer || teamRoundsWon;
+  teamTensWon = teamTensWonFromServer || teamTensWon;
   updateTeamDisplay();
 
   const winnerDiv = document.getElementById('winnerNotification');
   winnerDiv.style.display = 'block';
-  winnerDiv.innerHTML = `${winner} (${winnerTeam}) wins the hand with <b>${winningCard.value}${winningCard.suit}</b>!`;
+  
+  // Show if tens were won
+  let tenMessage = '';
+  if (tensInPile > 0) {
+    tenMessage = ` <span style="color: #d2691e;">(Won ${tensInPile} TEN${tensInPile > 1 ? 'S' : ''}!)</span>`;
+  }
+  
+  winnerDiv.innerHTML = `${winner} (${winnerTeam}) wins the hand with <b>${winningCard.value}${winningCard.suit}</b>!${tenMessage}`;
 
   setTimeout(() => {
     document.getElementById('playedCards').innerHTML = '';
