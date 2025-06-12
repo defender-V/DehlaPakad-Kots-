@@ -6,6 +6,43 @@ let players = [];
 let hand = [];
 let currentTrump = null;
 
+// Add these variables after your existing declarations
+let teamHandsWon = { 'Team 1': 0, 'Team 2': 0 };
+
+// Team functions
+function getTeams(players) {
+  const team1 = [];
+  const team2 = [];
+  players.forEach((p, i) => {
+    if (i % 2 === 0) team1.push(p.name);
+    else team2.push(p.name);
+  });
+  return { team1, team2 };
+}
+
+function updateTeamDisplay() {
+  const { team1, team2 } = getTeams(players);
+  document.getElementById('teamInfo').innerHTML =
+    `<b>Team 1</b> (${team1.join(', ')}): ${teamHandsWon['Team 1']} hands<br>
+     <b>Team 2</b> (${team2.join(', ')}): ${teamHandsWon['Team 2']} hands`;
+}
+
+function updateTurnUI(currentTurnId) {
+  const turnDiv = document.getElementById('currentTurn');
+  if (!turnDiv) return;
+  
+  const currentPlayer = players.find(p => p.id === currentTurnId);
+  if (currentPlayer) {
+    if (currentTurnId === socket.id) {
+      turnDiv.innerHTML = `<b>Your turn!</b>`;
+    } else {
+      turnDiv.innerHTML = `<b>${currentPlayer.name}'s turn</b>`;
+    }
+  } else {
+    turnDiv.innerHTML = "";
+  }
+}
+
 function showRoomOptions() {
   playerName = document.getElementById("playerName").value.trim();
   if (!playerName) {
@@ -57,7 +94,9 @@ socket.on("roomError", (msg) => {
 
 socket.on("updatePlayers", (pList) => {
   players = pList;
+  teamHandsWon = { 'Team 1': 0, 'Team 2': 0 }; // Reset team scores
   renderTable();
+  updateTeamDisplay(); // Add team display
 });
 
 function showGameRoom(roomId, pList) {
@@ -103,10 +142,12 @@ socket.on(
     currentRoomId = roomId;
     currentTrump = trump;
     renderTable();
+    updateTeamDisplay(); // Add this line
     hand = dealtHand;
     renderHand();
   }
 );
+
 
 socket.on("gameEnded", ({ trumpHistory }) => {
   const handDiv = document.getElementById("hand");
@@ -328,17 +369,17 @@ socket.on('yourTurn', () => {
 });
 
 socket.on('handStarted', ({ starter, currentPlayer }) => {
-  isMyTurn = (players[currentPlayer] && players[currentPlayer].id === socket.id);
+  isMyTurn = (currentPlayer === socket.id); // Fixed: compare with socket.id directly
   cardSelectionLocked = false;
-  const handDiv = document.getElementById('hand');
-  handDiv.innerHTML += `<div><b>${starter}</b> starts this hand</div>`;
+  updateTurnUI(currentPlayer);
   renderHand();
 });
 
 socket.on('turnChanged', ({ currentTurn, pile }) => {
-  isMyTurn = (players[currentTurn] && players[currentTurn].id === socket.id);
+  isMyTurn = (currentTurn === socket.id); // Fixed: compare with socket.id directly
   cardSelectionLocked = false;
-  updatePileUI(pile);
+  updateTurnUI(currentTurn);
+  updatePlayedCards(pile);
   renderHand();
 });
 
@@ -360,12 +401,15 @@ socket.on('cardPlayed', ({ player, card, playedCards }) => {
   updatePlayedCards(playedCards);
 });
 
-socket.on('handWon', ({ winner, winningCard, playedCards }) => {
+socket.on('handWon', ({ winner, winningCard, playedCards, teamHandsWon: teamHandsWonFromServer, winnerTeam }) => {
+  // Update team scores from server
+  teamHandsWon = teamHandsWonFromServer || teamHandsWon;
+  updateTeamDisplay();
+
   const winnerDiv = document.getElementById('winnerNotification');
   winnerDiv.style.display = 'block';
-  winnerDiv.innerHTML = `${winner} wins the hand with <b>${winningCard.value}${winningCard.suit}</b>!`;
+  winnerDiv.innerHTML = `${winner} (${winnerTeam}) wins the hand with <b>${winningCard.value}${winningCard.suit}</b>!`;
 
-  // Optionally clear played cards after showing winner
   setTimeout(() => {
     document.getElementById('playedCards').innerHTML = '';
     winnerDiv.style.display = 'none';

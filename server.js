@@ -21,6 +21,10 @@ function getPreviewCount(numPlayers) {
   return 8;
 }
 
+function getPlayerTeam(playerIndex) {
+  return playerIndex % 2 === 0 ? 'Team 1' : 'Team 2';
+}
+
 function askForTrump(roomId) {
   const room = rooms[roomId];
   const chooserIdx = room.trumpChooser;
@@ -53,7 +57,7 @@ function startNewHand(roomId) {
   const starter = room.players[room.handStarter];
   io.to(roomId).emit('handStarted', { 
     starter: starter.name,
-    currentPlayer: room.handStarter 
+    currentPlayer: starter.id  // Send player ID, not index
   });
   io.to(starter.id).emit('yourTurn', {});
 }
@@ -76,7 +80,7 @@ io.on('connection', (socket) => {
       trump: null,
       handStarter: 0,
       currentHand: null,
-      handsWon: {}
+      teamHandsWon: { 'Team 1': 0, 'Team 2': 0 }
     };
     currentRoomId = roomId;
     currentPlayerName = playerName;
@@ -110,8 +114,7 @@ io.on('connection', (socket) => {
       room.trumpHistory = [];
       room.trump = null;
       room.handStarter = 0;
-      room.handsWon = {};
-      room.players.forEach(p => room.handsWon[p.id] = 0);
+      room.teamHandsWon = { 'Team 1': 0, 'Team 2': 0 };
 
       io.to(roomId).emit('startGame', {});
       setTimeout(() => askForTrump(roomId), 2000);
@@ -123,7 +126,7 @@ io.on('connection', (socket) => {
     if (!room) return;
     room.trump = trump;
     room.trumpHistory.push(trump);
-    room.handStarter = room.trumpChooser; // First hand started by trump chooser
+    room.handStarter = room.trumpChooser;
 
     const numPlayers = room.maxPlayers;
     const totalCards = room.deck.length;
@@ -142,7 +145,8 @@ io.on('connection', (socket) => {
         players: room.players.map((p, idx) => ({
           name: p.name,
           seat: idx,
-          isSelf: p.id === player.id
+          isSelf: p.id === player.id,
+          team: getPlayerTeam(idx)
         })),
         roomId,
         trump
@@ -166,24 +170,17 @@ io.on('connection', (socket) => {
     const playerHand = room.hands[socket.id];
     const card = playerHand[cardIndex];
     
-    // Validate card play
     if (!canPlayCard(card, playerHand, room.currentHand.leadSuit)) {
       socket.emit('invalidCard', { message: 'You must follow suit if possible' });
       return;
     }
 
-    // Remove card from player's hand
     room.hands[socket.id].splice(cardIndex, 1);
-    // Send updated hand to the player who played
-    io.to(socket.id).emit('updateHand', room.hands[socket.id]);
-
     
-    // Set lead suit if first card
     if (!room.currentHand.leadSuit) {
       room.currentHand.leadSuit = card.suit;
     }
 
-    // Add to played cards
     room.currentHand.playedCards.push({
       playerId: socket.id,
       playerName: room.players[playerIdx].name,
@@ -196,9 +193,7 @@ io.on('connection', (socket) => {
       playedCards: room.currentHand.playedCards
     });
 
-    // Check if hand is complete
     if (room.currentHand.playedCards.length === room.maxPlayers) {
-      // Determine winner
       const winnerIdx = determineHandWinner(
         room.currentHand.playedCards, 
         room.currentHand.leadSuit, 
@@ -206,19 +201,26 @@ io.on('connection', (socket) => {
       );
       const winner = room.currentHand.playedCards[winnerIdx];
       const winnerPlayerIdx = room.players.findIndex(p => p.id === winner.playerId);
+      const winnerTeam = getPlayerTeam(winnerPlayerIdx);
       
-      room.handsWon[winner.playerId]++;
+      room.teamHandsWon[winnerTeam]++;
       room.handStarter = winnerPlayerIdx;
 
       io.to(roomId).emit('handWon', {
         winner: winner.playerName,
         winningCard: winner.card,
-        playedCards: room.currentHand.playedCards
+        playedCards: room.currentHand.playedCards,
+        teamHandsWon: room.teamHandsWon,
+        winnerTeam: winnerTeam
       });
 
-      // Check if round is over (no more cards)
-      if (room.hands[socket.id].length === 0) {
-        // Round over, check if game should continue
+      // Send updated hands to ALL players
+      room.players.forEach(player => {
+        io.to(player.id).emit('updateHand', room.hands[player.id]);
+      });
+
+      const anyCardsLeft = Object.values(room.hands).some(hand => hand.length > 0);
+      if (!anyCardsLeft) {
         if (room.trumpHistory.length < room.maxPlayers) {
           room.trumpChooser = (room.trumpChooser + 1) % room.maxPlayers;
           room.deck = createShuffledDeck(room.maxPlayers);
@@ -226,19 +228,21 @@ io.on('connection', (socket) => {
         } else {
           io.to(roomId).emit('gameEnded', { 
             trumpHistory: room.trumpHistory,
-            finalScores: room.handsWon
+            finalScores: room.teamHandsWon
           });
           delete rooms[roomId];
         }
       } else {
-        // Start next hand
         setTimeout(() => startNewHand(roomId), 2000);
       }
     } else {
-      // Next player's turn
       room.currentHand.currentPlayer = (room.currentHand.currentPlayer + 1) % room.maxPlayers;
       const nextPlayer = room.players[room.currentHand.currentPlayer];
       io.to(nextPlayer.id).emit('yourTurn', {});
+      io.to(roomId).emit('turnChanged', {
+        currentTurn: nextPlayer.id,
+        pile: room.currentHand.playedCards
+      });
     }
   });
 
