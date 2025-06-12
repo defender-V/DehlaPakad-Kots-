@@ -8,6 +8,7 @@ let currentTrump = null;
 
 // Add these variables after your existing declarations
 let teamHandsWon = { 'Team 1': 0, 'Team 2': 0 };
+let teamRoundsWon = { 'Team 1': 0, 'Team 2': 0 }; // Add this line
 
 // Team functions
 function getTeams(players) {
@@ -23,9 +24,18 @@ function getTeams(players) {
 function updateTeamDisplay() {
   const { team1, team2 } = getTeams(players);
   document.getElementById('teamInfo').innerHTML =
-    `<b>Team 1</b> (${team1.join(', ')}): ${teamHandsWon['Team 1']} hands<br>
-     <b>Team 2</b> (${team2.join(', ')}): ${teamHandsWon['Team 2']} hands`;
+    `<div style="margin-bottom: 10px;">
+       <b>Team 1</b> (${team1.join(', ')}): 
+       <span style="color: #1976d2;">${teamRoundsWon['Team 1']} rounds</span> | 
+       <span style="color: #666;">${teamHandsWon['Team 1']} hands</span>
+     </div>
+     <div>
+       <b>Team 2</b> (${team2.join(', ')}): 
+       <span style="color: #1976d2;">${teamRoundsWon['Team 2']} rounds</span> | 
+       <span style="color: #666;">${teamHandsWon['Team 2']} hands</span>
+     </div>`;
 }
+
 
 function updateTurnUI(currentTurnId) {
   const turnDiv = document.getElementById('currentTurn');
@@ -94,9 +104,10 @@ socket.on("roomError", (msg) => {
 
 socket.on("updatePlayers", (pList) => {
   players = pList;
-  teamHandsWon = { 'Team 1': 0, 'Team 2': 0 }; // Reset team scores
+  teamHandsWon = { 'Team 1': 0, 'Team 2': 0 };
+  teamRoundsWon = { 'Team 1': 0, 'Team 2': 0 }; // Add this line
   renderTable();
-  updateTeamDisplay(); // Add team display
+  updateTeamDisplay();
 });
 
 function showGameRoom(roomId, pList) {
@@ -395,15 +406,32 @@ socket.on('invalidCard', ({ message }) => {
   renderHand();
 });
 
+socket.on('roundEnded', ({ roundWinner, teamHandsWon: teamHandsWonFromServer, teamRoundsWon: teamRoundsWonFromServer }) => {
+  teamHandsWon = teamHandsWonFromServer || teamHandsWon;
+  teamRoundsWon = teamRoundsWonFromServer || teamRoundsWon;
+  updateTeamDisplay();
+
+  const winnerDiv = document.getElementById('winnerNotification');
+  winnerDiv.style.display = 'block';
+  if (roundWinner) {
+    winnerDiv.innerHTML = `<b style="font-size: 1.5em;">${roundWinner} wins the round!</b>`;
+  } else {
+    winnerDiv.innerHTML = `<b style="font-size: 1.5em;">Round tied!</b>`;
+  }
+
+  setTimeout(() => {
+    winnerDiv.style.display = 'none';
+  }, 3000);
+});
 
 socket.on('cardPlayed', ({ player, card, playedCards }) => {
   // Update UI to show played cards in center
   updatePlayedCards(playedCards);
 });
 
-socket.on('handWon', ({ winner, winningCard, playedCards, teamHandsWon: teamHandsWonFromServer, winnerTeam }) => {
-  // Update team scores from server
+socket.on('handWon', ({ winner, winningCard, playedCards, teamHandsWon: teamHandsWonFromServer, teamRoundsWon: teamRoundsWonFromServer, winnerTeam }) => {
   teamHandsWon = teamHandsWonFromServer || teamHandsWon;
+  teamRoundsWon = teamRoundsWonFromServer || teamRoundsWon; // Add this line
   updateTeamDisplay();
 
   const winnerDiv = document.getElementById('winnerNotification');

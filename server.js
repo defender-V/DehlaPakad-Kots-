@@ -69,19 +69,21 @@ io.on('connection', (socket) => {
   socket.on('createRoom', ({ playerName, numPlayers }) => {
     const roomId = uuidv4().slice(0, 6);
     rooms[roomId] = {
-      players: [{ id: socket.id, name: playerName }],
-      maxPlayers: parseInt(numPlayers, 10),
-      started: false,
-      deck: [],
-      hands: {},
-      round: 0,
-      trumpChooser: 0,
-      trumpHistory: [],
-      trump: null,
-      handStarter: 0,
-      currentHand: null,
-      teamHandsWon: { 'Team 1': 0, 'Team 2': 0 }
-    };
+  players: [{ id: socket.id, name: playerName }],
+  maxPlayers: parseInt(numPlayers, 10),
+  started: false,
+  deck: [],
+  hands: {},
+  round: 0,
+  trumpChooser: 0,
+  trumpHistory: [],
+  trump: null,
+  handStarter: 0,
+  currentHand: null,
+  teamHandsWon: { 'Team 1': 0, 'Team 2': 0 },
+  teamRoundsWon: { 'Team 1': 0, 'Team 2': 0 } // Add this line
+};
+
     currentRoomId = roomId;
     currentPlayerName = playerName;
     socket.join(roomId);
@@ -115,6 +117,7 @@ io.on('connection', (socket) => {
       room.trump = null;
       room.handStarter = 0;
       room.teamHandsWon = { 'Team 1': 0, 'Team 2': 0 };
+      room.teamRoundsWon= { 'Team 1': 0, 'Team 2': 0 };
 
       io.to(roomId).emit('startGame', {});
       setTimeout(() => askForTrump(roomId), 2000);
@@ -207,12 +210,14 @@ io.on('connection', (socket) => {
       room.handStarter = winnerPlayerIdx;
 
       io.to(roomId).emit('handWon', {
-        winner: winner.playerName,
-        winningCard: winner.card,
-        playedCards: room.currentHand.playedCards,
-        teamHandsWon: room.teamHandsWon,
-        winnerTeam: winnerTeam
-      });
+  winner: winner.playerName,
+  winningCard: winner.card,
+  playedCards: room.currentHand.playedCards,
+  teamHandsWon: room.teamHandsWon,
+  teamRoundsWon: room.teamRoundsWon, // Add this line
+  winnerTeam: winnerTeam
+});
+
 
       // Send updated hands to ALL players
       room.players.forEach(player => {
@@ -220,19 +225,44 @@ io.on('connection', (socket) => {
       });
 
       const anyCardsLeft = Object.values(room.hands).some(hand => hand.length > 0);
-      if (!anyCardsLeft) {
-        if (room.trumpHistory.length < room.maxPlayers) {
-          room.trumpChooser = (room.trumpChooser + 1) % room.maxPlayers;
-          room.deck = createShuffledDeck(room.maxPlayers);
-          setTimeout(() => askForTrump(roomId), 3000);
-        } else {
-          io.to(roomId).emit('gameEnded', { 
-            trumpHistory: room.trumpHistory,
-            finalScores: room.teamHandsWon
-          });
-          delete rooms[roomId];
-        }
-      } else {
+if (!anyCardsLeft) {
+  // Round is over - determine round winner
+  const team1Hands = room.teamHandsWon['Team 1'];
+  const team2Hands = room.teamHandsWon['Team 2'];
+  let roundWinner = null;
+  
+  if (team1Hands > team2Hands) {
+    roundWinner = 'Team 1';
+    room.teamRoundsWon['Team 1']++;
+  } else if (team2Hands > team1Hands) {
+    roundWinner = 'Team 2';
+    room.teamRoundsWon['Team 2']++;
+  }
+  // If tied, no one wins the round
+
+  // Emit round end with winner
+  io.to(roomId).emit('roundEnded', {
+    roundWinner: roundWinner,
+    teamHandsWon: room.teamHandsWon,
+    teamRoundsWon: room.teamRoundsWon
+  });
+
+  // Reset hands won for next round
+  room.teamHandsWon = { 'Team 1': 0, 'Team 2': 0 };
+
+  if (room.trumpHistory.length < room.maxPlayers) {
+    room.trumpChooser = (room.trumpChooser + 1) % room.maxPlayers;
+    room.deck = createShuffledDeck(room.maxPlayers);
+    setTimeout(() => askForTrump(roomId), 3000);
+  } else {
+    io.to(roomId).emit('gameEnded', { 
+      trumpHistory: room.trumpHistory,
+      finalScores: room.teamRoundsWon
+    });
+    delete rooms[roomId];
+  }
+}
+ else {
         setTimeout(() => startNewHand(roomId), 2000);
       }
     } else {

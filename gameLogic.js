@@ -1,6 +1,7 @@
 function createShuffledDeck(numPlayers) {
   const suits = ['♠', '♥', '♦', '♣'];
-  const values = ['2','3','4','5','6','7','8','9','10','J','Q','K', 'A'];
+  // const values = ['2','3','4','5','6','7','8','9','10','J','Q','K', 'A'];
+  const values = ['J','Q','K', 'A'];
   let deck = [];
   for (let suit of suits) {
     for (let value of values) {
