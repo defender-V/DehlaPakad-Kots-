@@ -211,7 +211,7 @@ socket.on("dealHand", ({ hand: dealtHand, seat, players: playerList, roomId, tru
     if (messageDiv.parentNode) {
       messageDiv.parentNode.removeChild(messageDiv);
     }
-  }, 3000);
+  }, 2000);
 });
 
 
@@ -318,7 +318,7 @@ function showShuffleAnimation() {
   setTimeout(() => {
     clearInterval(shuffleInterval);
     shuffleDiv.style.display = "none";
-  }, 3000);
+  }, 2500);
 }
 
 function hideShuffleAnimation() {
@@ -512,10 +512,54 @@ socket.on('handWon', ({ winner, winningCard, playedCards, teamHandsWon: teamHand
 
 
 socket.on('gameEnded', ({ trumpHistory, finalScores }) => {
+  // Determine the team with most rounds won or if tied
+  const team1Rounds = finalScores['Team 1'] || 0;
+  const team2Rounds = finalScores['Team 2'] || 0;
+  let finalResultMessage = '';
+  let resultColor = '';
+
+  if (team1Rounds > team2Rounds) {
+    finalResultMessage = `🏆 Team 1 wins the game with ${team1Rounds} rounds!`;
+    resultColor = '#1976d2';
+  } else if (team2Rounds > team1Rounds) {
+    finalResultMessage = `🏆 Team 2 wins the game with ${team2Rounds} rounds!`;
+    resultColor = '#f44336';
+  } else {
+    finalResultMessage = `🤝 The game is a tie with both teams having ${team1Rounds} rounds!`;
+    resultColor = '#ff9800';
+  }
+
+  // Create a centered overlay for final game result
+  let tableDiv = document.getElementById("table");
+  let gameEndOverlay = document.getElementById("gameEndOverlay");
+  if (!gameEndOverlay) {
+    gameEndOverlay = document.createElement("div");
+    gameEndOverlay.id = "gameEndOverlay";
+    gameEndOverlay.className = "game-end-overlay";
+    tableDiv.appendChild(gameEndOverlay);
+  }
+  gameEndOverlay.innerHTML = "";
+  gameEndOverlay.style.display = "flex";
+
+  // Create the game end notification content
+  const gameEndContent = document.createElement("div");
+  gameEndContent.className = "game-end-content";
+  gameEndContent.style.background = `linear-gradient(45deg, ${resultColor}, ${resultColor}aa)`;
+  
+  gameEndContent.innerHTML = `
+    <div style="font-size: 2em; margin-bottom: 15px;">🎮 Game Over!</div>
+    <div style="font-size: 1.5em; margin-bottom: 10px;">${finalResultMessage}</div>
+    <div style="font-size: 1em; opacity: 0.9;">Trump suits played: ${trumpHistory.join(', ')}</div>
+    <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; font-size: 1.1em; background: white; color: ${resultColor}; border: none; border-radius: 8px; cursor: pointer;">Play Again</button>
+  `;
+  
+  gameEndOverlay.appendChild(gameEndContent);
+
+  // Update hand area with simple message
   const handDiv = document.getElementById('hand');
-  handDiv.innerHTML = `<div>Game Over! Trump suits: ${trumpHistory.join(', ')}</div>`;
-  // Show final scores
+  handDiv.innerHTML = `<div style="text-align: center; font-size: 1.2em; color: #666;">Game completed! Check the table for final results.</div>`;
 });
+
 
 function updatePlayedCards(playedCards) {
   let playedDiv = document.getElementById('playedCards');
