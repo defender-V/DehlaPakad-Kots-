@@ -318,7 +318,7 @@ function showShuffleAnimation() {
   setTimeout(() => {
     clearInterval(shuffleInterval);
     shuffleDiv.style.display = "none";
-  }, 2500);
+  }, 3000);
 }
 
 function hideShuffleAnimation() {
@@ -506,7 +506,7 @@ socket.on('handWon', ({ winner, winningCard, playedCards, teamHandsWon: teamHand
   setTimeout(() => {
     document.getElementById('playedCards').innerHTML = '';
     handWinnerOverlay.style.display = "none";
-  }, 3000);
+  }, 2000);
 });
 
 
