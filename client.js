@@ -11,6 +11,37 @@ let teamHandsWon = { 'Team 1': 0, 'Team 2': 0 };
 let teamRoundsWon = { 'Team 1': 0, 'Team 2': 0 }; // Add this line
 let teamTensWon = { 'Team 1': 0, 'Team 2': 0 };
 
+function showWinnerNotification(roundWinner, winReason) {
+  // Create a centered overlay for winner notification
+  let tableDiv = document.getElementById("table");
+  let winnerOverlay = document.getElementById("winnerOverlay");
+  if (!winnerOverlay) {
+    winnerOverlay = document.createElement("div");
+    winnerOverlay.id = "winnerOverlay";
+    winnerOverlay.className = "winner-overlay";
+    tableDiv.appendChild(winnerOverlay);
+  }
+  winnerOverlay.innerHTML = "";
+  winnerOverlay.style.display = "flex";
+
+  // Create the winner notification content
+  const winnerContent = document.createElement("div");
+  winnerContent.className = "winner-content";
+  
+  if (roundWinner) {
+    winnerContent.innerHTML = `<b style="font-size: 1.5em;">${roundWinner} wins the round!</b><br><small>${winReason}</small>`;
+  } else {
+    winnerContent.innerHTML = `<b style="font-size: 1.5em;">Round tied!</b><br><small>${winReason}</small>`;
+  }
+  
+  winnerOverlay.appendChild(winnerContent);
+
+  // Auto-hide after 4 seconds
+  setTimeout(() => {
+    winnerOverlay.style.display = "none";
+  }, 4000);
+}
+
 // Team functions
 function getTeams(players) {
   const team1 = [];
@@ -180,7 +211,7 @@ socket.on("dealHand", ({ hand: dealtHand, seat, players: playerList, roomId, tru
     if (messageDiv.parentNode) {
       messageDiv.parentNode.removeChild(messageDiv);
     }
-  }, 2000);
+  }, 3000);
 });
 
 
@@ -287,7 +318,7 @@ function showShuffleAnimation() {
   setTimeout(() => {
     clearInterval(shuffleInterval);
     shuffleDiv.style.display = "none";
-  }, 2000);
+  }, 3000);
 }
 
 function hideShuffleAnimation() {
@@ -430,17 +461,7 @@ socket.on('roundEnded', ({ roundWinner, winReason, teamHandsWon: teamHandsWonFro
   teamTensWon = teamTensWonFromServer || teamTensWon;
   updateTeamDisplay();
 
-  const winnerDiv = document.getElementById('winnerNotification');
-  winnerDiv.style.display = 'block';
-  if (roundWinner) {
-    winnerDiv.innerHTML = `<b style="font-size: 1.5em;">${roundWinner} wins the round!</b><br><small>${winReason}</small>`;
-  } else {
-    winnerDiv.innerHTML = `<b style="font-size: 1.5em;">Round tied!</b><br><small>${winReason}</small>`;
-  }
-
-  setTimeout(() => {
-    winnerDiv.style.display = 'none';
-  }, 4000); // Longer timeout to read the reason
+  showWinnerNotification(roundWinner, winReason)
 });
 
 
@@ -455,22 +476,39 @@ socket.on('handWon', ({ winner, winningCard, playedCards, teamHandsWon: teamHand
   teamTensWon = teamTensWonFromServer || teamTensWon;
   updateTeamDisplay();
 
-  const winnerDiv = document.getElementById('winnerNotification');
-  winnerDiv.style.display = 'block';
+  // Create a centered overlay for hand winner notification
+  let tableDiv = document.getElementById("table");
+  let handWinnerOverlay = document.getElementById("handWinnerOverlay");
+  if (!handWinnerOverlay) {
+    handWinnerOverlay = document.createElement("div");
+    handWinnerOverlay.id = "handWinnerOverlay";
+    handWinnerOverlay.className = "hand-winner-overlay";
+    tableDiv.appendChild(handWinnerOverlay);
+  }
+  handWinnerOverlay.innerHTML = "";
+  handWinnerOverlay.style.display = "flex";
+
+  // Create the hand winner notification content
+  const handWinnerContent = document.createElement("div");
+  handWinnerContent.className = "hand-winner-content";
   
   // Show if tens were won
   let tenMessage = '';
   if (tensInPile > 0) {
-    tenMessage = ` <span style="color: #d2691e;">(Won ${tensInPile} TEN${tensInPile > 1 ? 'S' : ''}!)</span>`;
+    tenMessage = ` <span style="color: #d2691e;">🔟 Won ${tensInPile} TEN${tensInPile > 1 ? 'S' : ''}!</span>`;
   }
   
-  winnerDiv.innerHTML = `${winner} (${winnerTeam}) wins the hand with <b>${winningCard.value}${winningCard.suit}</b>!${tenMessage}`;
+  handWinnerContent.innerHTML = `${winner} (${winnerTeam}) wins the hand with <b>${winningCard.value}${winningCard.suit}</b>!${tenMessage}`;
+  
+  handWinnerOverlay.appendChild(handWinnerContent);
 
+  // Auto-hide after 2 seconds and clear played cards
   setTimeout(() => {
     document.getElementById('playedCards').innerHTML = '';
-    winnerDiv.style.display = 'none';
-  }, 2000);
+    handWinnerOverlay.style.display = "none";
+  }, 3000);
 });
+
 
 
 socket.on('gameEnded', ({ trumpHistory, finalScores }) => {
