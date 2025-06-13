@@ -137,6 +137,9 @@ socket.on("startGame", () => {
 socket.on("chooseTrump", ({ previewHand, suits }) => {
   hideShuffleAnimation();
   showTrumpChooser(previewHand, suits);
+  // Store preview hand temporarily
+  hand = previewHand;
+  renderHand();
 });
 
 socket.on("waitingForTrump", ({ chooser }) => {
@@ -151,19 +154,34 @@ socket.on('trumpSet', ({ trump }) => {
 });
 
 
-socket.on(
-  "dealHand",
-  ({ hand: dealtHand, seat, players: playerList, roomId, trump }) => {
-    mySeat = seat;
-    players = playerList;
-    currentRoomId = roomId;
-    currentTrump = trump;
-    renderTable();
-    updateTeamDisplay(); // Add this line
-    hand = dealtHand;
-    renderHand();
-  }
-);
+socket.on("dealHand", ({ hand: dealtHand, seat, players: playerList, roomId, trump }) => {
+  mySeat = seat;
+  players = playerList;
+  currentRoomId = roomId;
+  currentTrump = trump;
+  renderTable();
+  updateTeamDisplay();
+  
+  // Update hand with full cards (includes the preview cards)
+  hand = dealtHand;
+  renderHand();
+  
+  // Show message about receiving full hand
+  const handDiv = document.getElementById("hand");
+  const messageDiv = document.createElement("div");
+  messageDiv.style.textAlign = "center";
+  messageDiv.style.marginBottom = "10px";
+  messageDiv.style.color = "#1976d2";
+  messageDiv.innerHTML = "<b>Full hand received!</b>";
+  handDiv.insertBefore(messageDiv, handDiv.firstChild);
+  
+  // Remove message after 2 seconds
+  setTimeout(() => {
+    if (messageDiv.parentNode) {
+      messageDiv.parentNode.removeChild(messageDiv);
+    }
+  }, 2000);
+});
 
 
 socket.on("gameEnded", ({ trumpHistory }) => {
@@ -338,15 +356,7 @@ function playCard(idx) {
 // --- Trump Chooser UI ---
 function showTrumpChooser(previewHand, suits) {
   const handDiv = document.getElementById("hand");
-  handDiv.innerHTML = "<div><b>Select the trump suit for this round:</b></div>";
-
-  // Show preview cards
-  previewHand.forEach((card) => {
-    const cardDiv = document.createElement("div");
-    cardDiv.className = "card";
-    cardDiv.innerText = card.value + card.suit;
-    handDiv.appendChild(cardDiv);
-  });
+  handDiv.innerHTML = "<div><b>Your preview cards - Select the trump suit for this round:</b></div>";
 
   // Create a centered overlay for suit selection
   let tableDiv = document.getElementById("table");
@@ -368,11 +378,13 @@ function showTrumpChooser(previewHand, suits) {
       socket.emit("trumpChosen", { roomId: currentRoomId, trump: suit });
       // Hide overlay and show waiting message
       suitOverlay.style.display = "none";
-      handDiv.innerHTML = "<div>Waiting for other players...</div>";
+      const handDiv = document.getElementById("hand");
+      handDiv.innerHTML = "<div>Trump chosen! Waiting for full hand...</div>";
     };
     suitOverlay.appendChild(btn);
   });
 }
+
 
 // Add these new event handlers and functions to your existing client.js
 

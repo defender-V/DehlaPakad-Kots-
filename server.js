@@ -32,11 +32,16 @@ function askForTrump(roomId) {
   const numPlayers = room.maxPlayers;
   const previewCount = getPreviewCount(numPlayers);
 
-  let hand = room.deck.slice(chooserIdx * previewCount, chooserIdx * previewCount + previewCount);
-  hand = sortHand(hand);
-  room.hands[chooser.id] = hand;
+  // Give trump chooser their preview cards from their actual hand position
+  const handSize = Math.floor(room.deck.length / numPlayers);
+  const start = chooserIdx * handSize;
+  let previewHand = room.deck.slice(start, start + previewCount);
+  previewHand = sortHand(previewHand);
+  
+  // Store the preview cards as the trump chooser's partial hand
+  room.hands[chooser.id] = previewHand;
 
-  io.to(chooser.id).emit('chooseTrump', { previewHand: hand, suits: ['♠', '♥', '♦', '♣'] });
+  io.to(chooser.id).emit('chooseTrump', { previewHand: previewHand, suits: ['♠', '♥', '♦', '♣'] });
 
   room.players.forEach((p, idx) => {
     if (idx !== chooserIdx) {
@@ -127,40 +132,44 @@ io.on('connection', (socket) => {
   });
 
   socket.on('trumpChosen', ({ roomId, trump }) => {
-    const room = rooms[roomId];
-    if (!room) return;
-    room.trump = trump;
-    room.trumpHistory.push(trump);
-    room.handStarter = room.trumpChooser;
+  const room = rooms[roomId];
+  if (!room) return;
+  room.trump = trump;
+  room.trumpHistory.push(trump);
+  room.handStarter = room.trumpChooser;
 
-    const numPlayers = room.maxPlayers;
-    const totalCards = room.deck.length;
-    const handSize = Math.floor(totalCards / numPlayers);
+  const numPlayers = room.maxPlayers;
+  const totalCards = room.deck.length;
+  const handSize = Math.floor(totalCards / numPlayers);
 
-    for (let i = 0; i < numPlayers; i++) {
-      const player = room.players[i];
-      let start = i * handSize;
-      let end = (i + 1) * handSize;
-      let playerHand = room.deck.slice(start, end);
-      playerHand = sortHand(playerHand);
-      room.hands[player.id] = playerHand;
-      io.to(player.id).emit('dealHand', {
-        hand: playerHand,
-        seat: i,
-        players: room.players.map((p, idx) => ({
-          name: p.name,
-          seat: idx,
-          isSelf: p.id === player.id,
-          team: getPlayerTeam(idx)
-        })),
-        roomId,
-        trump
-      });
-    }
+  for (let i = 0; i < numPlayers; i++) {
+    const player = room.players[i];
+    let start = i * handSize;
+    let end = (i + 1) * handSize;
+    let playerHand = room.deck.slice(start, end);
+    playerHand = sortHand(playerHand);
+    
+    // For trump chooser, they already have their full hand (preview was from their actual position)
+    room.hands[player.id] = playerHand;
+    
+    io.to(player.id).emit('dealHand', {
+      hand: playerHand,
+      seat: i,
+      players: room.players.map((p, idx) => ({
+        name: p.name,
+        seat: idx,
+        isSelf: p.id === player.id,
+        team: getPlayerTeam(idx)
+      })),
+      roomId,
+      trump
+    });
+  }
 
-    io.to(roomId).emit('trumpSet', { trump });
-    setTimeout(() => startNewHand(roomId), 2000);
-  });
+  io.to(roomId).emit('trumpSet', { trump });
+  setTimeout(() => startNewHand(roomId), 2000);
+});
+
 
   socket.on('playCard', ({ roomId, cardIndex }) => {
     const room = rooms[roomId];
