@@ -29,6 +29,7 @@ Players sit alternately so that teammates are opposite each other.
 - Players must **follow suit** if they have cards of the same suit.
 - If a player does not have a card in the lead suit, they may play any card, including a **trump**.
 - The **highest card of the lead suit** or the **highest trump** wins the hand.
+- The round will be won by that team that secures modt of the tens.
 - The game will be played for that many rounds as the number of players.
 - The game will end when all players have spoken trump.
 - The game will be won by the team which won most of the rounds
