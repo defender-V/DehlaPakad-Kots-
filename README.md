@@ -10,6 +10,29 @@ A real-time multiplayer card game built with Node.js, Express, and Socket.IO whe
 - Multiple player support
 - Responsive design
 
+# Kots Game Rules
+
+**Kots**, also known as **Dehla Pakad**, is a traditional trick-taking card game played in teams. The goal is to capture the most **10s** or win. The game requires strategic play and teamwork.
+
+---
+
+- **Players:** (2,4,6,8) (in teams of 2)
+- **Deck:** Standard 52-card deck (no jokers)(48 cards(all 2's removed) for 6 and 8 players)
+
+Players sit alternately so that teammates are opposite each other.
+
+---
+
+## 🎮 Gameplay
+
+- The player to join first will start the round.
+- Players must **follow suit** if they have cards of the same suit.
+- If a player does not have a card in the lead suit, they may play any card, including a **trump**.
+- The **highest card of the lead suit** or the **highest trump** wins the hand.
+- The game will be played for that many rounds as the number of players.
+- The game will end when all players have spoken trump.
+- The game will be won by the team which won most of the rounds
+
 ## 🚀 Getting Started
 
 ### Prerequisites
