@@ -1,7 +1,7 @@
 {
   "name": "dehlapakad-kots-",
   "version": "1.0.0",
-  "description": "",
+  "description": "npm init -y",
   "main": "client.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
